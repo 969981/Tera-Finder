@@ -374,6 +374,7 @@ public partial class EditorForm : Form
 
     private void UpdatePKMInfo(TeraRaidDetail raid)
     {
+        byte groupidForDisplay = 0;
         if (Progress is not GameProgress.Beginning && ((raid.Seed == 0 && raid.IsEnabled) || raid.Seed > 0))
         {
             var content = (RaidContent)cmbContent.SelectedIndex;
@@ -389,6 +390,23 @@ public partial class EditorForm : Form
                     }, cmbDens.SelectedIndex),
                     _ => (byte)0,
             };
+
+            // A manually edited raid, or an incomplete priority table, can make the
+            // position-based index invalid. Recover it only if the seed matches one
+            // and only one group; otherwise leave the original result unchanged.
+            if (content is RaidContent.Event or RaidContent.Event_Mighty)
+            {
+                var pool = content is RaidContent.Event ? RaidEncounters.Dist : RaidEncounters.Mighty;
+                var stage = EventUtil.GetEventStageFromProgress(Progress);
+                if (groupid == 0 || EncounterEventTF9.GetEncounterFromSeed(raid.Seed, pool, SAV.Version, stage, groupid) is null)
+                {
+                    var uniqueGroup = EventUtil.GetUniqueMatchingEventGroupID(pool, raid.Seed, SAV.Version, stage);
+                    if (uniqueGroup != 0)
+                        groupid = uniqueGroup;
+                }
+            }
+
+            groupidForDisplay = groupid;
 
             var success = EncounterRaidTF9.TryGenerateTeraDetails(raid.Seed, content switch
             {
@@ -467,8 +485,13 @@ public partial class EditorForm : Form
         lblAbility.Text = $"{Strings["EditorForm.lblAbility"]}";
         lblShiny.Text = $"{Strings["EditorForm.lblShiny"]}";
         lblGender.Text = $"{Strings["EditorForm.lblGender"]}";
-        lblIndex.Text = $"{Strings["EditorForm.lblIndex"]} {Strings["EditorForm.txtMove1"]}";
-        lblIndex.Visible = true;
+        // Keep a successfully determined group visible even when encounter data
+        // cannot be generated, so failures are distinguishable from a missing index.
+        var failedContent = (RaidContent)cmbContent.SelectedIndex;
+        lblIndex.Text = failedContent is RaidContent.Event or RaidContent.Event_Mighty
+            ? $"{Strings["EditorForm.lblIndex"]} {(groupidForDisplay != 0 ? groupidForDisplay.ToString() : Strings["EditorForm.txtMove1"])}"
+            : $"{Strings["EditorForm.lblIndex"]} {Strings["EditorForm.txtMove1"]}";
+        lblIndex.Visible = failedContent is RaidContent.Event or RaidContent.Event_Mighty;
         txtHP.Text = $"";
         txtAtk.Text = $"";
         txtDef.Text = $"";
