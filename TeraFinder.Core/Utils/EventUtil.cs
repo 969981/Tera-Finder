@@ -250,7 +250,7 @@ public static class EventUtil
     /// Recover the group of a raid when the event priority table is missing or does not
     /// match the selected crystal. Never guess if two or more groups match the seed.
     /// </summary>
-    public static byte GetUniqueMatchingEventGroupID(EncounterEventTF9[] encounters, uint seed, GameVersion version, EventProgress progress)
+    public static byte GetUniqueMatchingEventGroupID(EncounterEventTF9[] encounters, uint seed, PKHeX.Core.GameVersion version, EventProgress progress)
     {
         byte match = 0;
         foreach (var group in encounters.Select(z => z.Index).Where(z => z != 0).Distinct())
