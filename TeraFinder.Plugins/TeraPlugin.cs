@@ -30,6 +30,7 @@ public class TeraPlugin : ITFPlugin
     public Dictionary<uint, HashSet<EncounterEventTF9>> AllDist { get; set; } = null!;
     public Dictionary<uint, HashSet<EncounterEventTF9>> AllMighty { get; set; } = null!;
     private uint EventRaidIdentifier = uint.MaxValue;
+    private SAV9SV? EventRaidSave;
 
 
     public SAV9SV SAV { get; set; } = null!;
@@ -128,10 +129,25 @@ public class TeraPlugin : ITFPlugin
         }
 
         var identifier = GetRaidEventIdentifier();
-        if (identifier != EventRaidIdentifier)
+        // The event ID alone is not a valid cache key: different saves can contain
+        // different BCAT data while reporting the same distribution identifier.
+        if (identifier != EventRaidIdentifier || !ReferenceEquals(EventRaidSave, SAV))
         {
             (Dist, Mighty) = EventUtil.GetCurrentEventEncounters(SAV, RewardUtil.GetDistRewardsTables(SAV));
+
+            // Historical encounters are bundled with Tera Finder for seed checking.
+            // If the current BCAT encounter table cannot be parsed, use only entries
+            // with the EXACT event identifier for viewing (archived rewards are empty).
+            if (identifier != 0 && Dist.Length == 0 && Mighty.Length == 0)
+            {
+                Dist = AllDist.TryGetValue(identifier, out var archivedDist) ? [.. archivedDist] : [];
+                Mighty = AllMighty.TryGetValue(identifier, out var archivedMighty) ? [.. archivedMighty] : [];
+                if (Dist.Length != 0 || Mighty.Length != 0)
+                    System.Diagnostics.Trace.TraceWarning($"Using archived encounters for raid event {identifier} because the current BCAT encounter table could not be loaded. Archived rewards may be unavailable.");
+            }
+
             EventRaidIdentifier = identifier;
+            EventRaidSave = SAV;
         }
     }
 
