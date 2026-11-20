@@ -1,0 +1,78 @@
+name: Publish v4.3.8.1 Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-v4.3.8.1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download tested binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p release/launcher release/plugins
+          gh run download 44761327873 --repo "${GITHUB_REPOSITORY}" --name TeraFinder.Launcher --dir release/launcher
+          gh run download 44761327873 --repo "${GITHUB_REPOSITORY}" --name TeraFinder.Plugins --dir release/plugins
+          test -n "$(find release/launcher -type f -print -quit)"
+          test -n "$(find release/plugins -type f -print -quit)"
+          echo "Launcher contents:"
+          find release/launcher -type f | head -20
+          echo "Plugin contents:"
+          find release/plugins -type f | head -20
+
+      - name: Package verified artifacts
+        run: |
+          set -euo pipefail
+          (cd release/launcher && zip -q -r ../TeraFinder.Launcher-v4.3.8.1.zip .)
+          (cd release/plugins && zip -q -r ../TeraFinder.Plugins-v4.3.8.1.zip .)
+          test -s release/TeraFinder.Launcher-v4.3.8.1.zip
+          test -s release/TeraFinder.Plugins-v4.3.8.1.zip
+          sha256sum release/*.zip | tee release/SHA256SUMS.txt
+
+      - name: Write release notes
+        run: |
+          cat > release/RELEASE_NOTES.md <<'EOF'
+          ## Tera Finder v4.3.8.1 — Event Raid Viewer Fix
+
+          Maintenance build of Tera Finder 4.3.8 for Pokémon Scarlet/Violet, based on the fix merged in #1.
+
+          ### Fixes
+          - Refresh event encounter data when switching saves, even if the event identifier is unchanged.
+          - Log errors from parsing Poké Portal News raid encounters.
+          - Fall back to exactly matching built-in historical event encounters if current BCAT encounter tables cannot be parsed. Archived rewards can be unavailable.
+          - Recover a missing event group ID only when a raid seed matches exactly one group; preserve the group in the viewer if generation fails.
+
+          ### Downloads
+          - **TeraFinder.Launcher-v4.3.8.1.zip** — standalone Windows launcher.
+          - **TeraFinder.Plugins-v4.3.8.1.zip** — PKHeX plugin build.
+          - **SHA256SUMS.txt** — SHA-256 checksums of both ZIP files.
+
+          ### Verification
+          - Windows .NET 10 build and full xUnit suite passed in [CI run #44761327873](https://github.com/969981/Tera-Finder/actions/runs/44761327873).
+          - The original reported Scarlet/Violet save was checked locally read-only, with event 20230622 and seed DB72E373. Windows GUI behavior is not yet confirmed.
+          - The application's internal version label may still read 4.3.8. Release tag 4.3.8.1 identifies this patched build.
+
+          The release files are repackaged verbatim from the successful CI artifacts, not rebuilt during release publishing.
+          EOF
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="v4.3.8.1"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/TeraFinder.Launcher-v4.3.8.1.zip release/TeraFinder.Plugins-v4.3.8.1.zip release/SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" release/TeraFinder.Launcher-v4.3.8.1.zip release/TeraFinder.Plugins-v4.3.8.1.zip release/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "a00387396076edbb2b2ecdd7dab35d68d6ea7a49" --title "Tera Finder v4.3.8.1 — Event Raid Fix" --notes-file release/RELEASE_NOTES.md
+          fi
