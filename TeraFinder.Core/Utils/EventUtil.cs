@@ -25,7 +25,12 @@ public static class EventUtil
             (var distData, var mightyData) = GetEventEncounterData(sav);
             return (EncounterEventTF9.GetArray(distData, rewards.fixedRewards, rewards.lotteryRewards), EncounterEventTF9.GetArray(mightyData, rewards.fixedRewards, rewards.lotteryRewards));
         }
-        catch { }
+        catch (Exception ex)
+        {
+            // A malformed or incompatible Poké Portal News table must not crash the editor.
+            // Preserve the failure reason for diagnosis instead of silently returning no encounters.
+            System.Diagnostics.Trace.TraceError($"Could not parse current raid event encounters: {ex}");
+        }
         return ([], []);
     }
 
@@ -239,6 +244,24 @@ public static class EventUtil
         var eventCount = GetEventCount(raids, ++currRaid);
         var priority = GetEventDeliveryPriority(sav);
         return  priority is not null ? GetDeliveryGroupID(eventCount, priority.GroupID.Groups, possibleGroups) : (byte)0;
+    }
+
+    /// <summary>
+    /// Recover the group of a raid when the event priority table is missing or does not
+    /// match the selected crystal. Never guess if two or more groups match the seed.
+    /// </summary>
+    public static byte GetUniqueMatchingEventGroupID(EncounterEventTF9[] encounters, uint seed, GameVersion version, EventProgress progress)
+    {
+        byte match = 0;
+        foreach (var group in encounters.Select(z => z.Index).Where(z => z != 0).Distinct())
+        {
+            if (EncounterEventTF9.GetEncounterFromSeed(seed, encounters, version, progress, group) is null)
+                continue;
+            if (match != 0)
+                return 0; // Ambiguous: do not silently display a different encounter.
+            match = group;
+        }
+        return match;
     }
 
     private static int GetEventCount(RaidSpawnList9 raids, int selected)
