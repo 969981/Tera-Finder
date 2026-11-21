@@ -66,13 +66,13 @@ jobs:
       - name: Publish x64 single EXE
         shell: pwsh
         run: |
-          dotnet publish TeraFinder.Launcher/TeraFinder.Launcher.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:PublishTrimmed=false -o package/win-x64
+          dotnet publish TeraFinder.Launcher/TeraFinder.Launcher.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=false -p:PublishTrimmed=false -o package/win-x64
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Publish x86 single EXE
         shell: pwsh
         run: |
-          dotnet publish TeraFinder.Launcher/TeraFinder.Launcher.csproj -c Release -r win-x86 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:PublishTrimmed=false -o package/win-x86
+          dotnet publish TeraFinder.Launcher/TeraFinder.Launcher.csproj -c Release -r win-x86 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=false -p:PublishTrimmed=false -o package/win-x86
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Create verified 1-file archives
