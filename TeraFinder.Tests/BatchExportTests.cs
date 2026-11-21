@@ -76,6 +76,7 @@ public class BatchExportTests
 
             Assert.Equal(pk9, bin);
             Assert.Contains("DB72E373", manifest);
+            Assert.Contains(",976,3,", manifest); // correct species/stars even without a precomputed snapshot
             Assert.Contains("Exported", manifest);
             Assert.True(new PK9(pk9).ChecksumValid);
         }
