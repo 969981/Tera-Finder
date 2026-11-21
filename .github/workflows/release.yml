@@ -128,11 +128,11 @@ jobs:
           $idx = $old.IndexOf($marker, [StringComparison]::Ordinal)
           if ($idx -ge 0) { $old = $old.Substring(0, $idx).TrimEnd() }
           if (!$old) { $old = "# Tera Finder $tag" }
-          $hashes = $zips | ForEach-Object { "`$(Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLowerInvariant()  `$($_.Name)" }
+          $hashes = $zips | ForEach-Object { ("{0}  {1}" -f (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLowerInvariant(), $_.Name) }
           $body = $old + "`n`n" + $marker + "`n`n" +
             "Repacked to match the upstream project: Windows x64 and x86 ZIPs contain only **TeraFinder.Launcher.exe**; the plugin ZIP contains only **TeraFinder.Plugins.dll**. No intermediate build directories, deps.json or supporting DLL clutter. The Launcher is framework-dependent and requires the .NET 10 Windows Desktop Runtime.`n`n" +
             "All 16 automated tests pass. On-device GUI testing is still recommended.`n`n" +
-            "SHA-256 checksums:`n```text`n" + ($hashes -join "`n") + "`n```"
+            "SHA-256 checksums:`n" + ($hashes -join "`n")
           $notes = "package/zips/release-notes.md"
           [System.IO.File]::WriteAllText((Join-Path (Get-Location) $notes), $body, [System.Text.UTF8Encoding]::new($false))
           if ($exists) {
