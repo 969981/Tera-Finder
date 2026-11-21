@@ -122,6 +122,7 @@ jobs:
           $tag = $env:RELEASE_TAG
           $repo = $env:GITHUB_REPOSITORY
           $zips = @(Get-ChildItem package/zips/*.zip | Sort-Object Name)
+          $PSNativeCommandUseErrorActionPreference = $false
           $old = (gh release view $tag --repo $repo --json body --jq .body 2>$null | Out-String).TrimEnd()
           $exists = $LASTEXITCODE -eq 0
           $marker = '## Official-style distribution'
@@ -131,7 +132,7 @@ jobs:
           $hashes = $zips | ForEach-Object { ("{0}  {1}" -f (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLowerInvariant(), $_.Name) }
           $body = $old + "`n`n" + $marker + "`n`n" +
             "Repacked to match the upstream project: Windows x64 and x86 ZIPs contain only **TeraFinder.Launcher.exe**; the plugin ZIP contains only **TeraFinder.Plugins.dll**. No intermediate build directories, deps.json or supporting DLL clutter. The Launcher is framework-dependent and requires the .NET 10 Windows Desktop Runtime.`n`n" +
-            "All 16 automated tests pass. On-device GUI testing is still recommended.`n`n" +
+            "Automated regression tests passed. On-device GUI testing is still recommended.`n`n" +
             "SHA-256 checksums:`n" + ($hashes -join "`n")
           $notes = "package/zips/release-notes.md"
           [System.IO.File]::WriteAllText((Join-Path (Get-Location) $notes), $body, [System.Text.UTF8Encoding]::new($false))
