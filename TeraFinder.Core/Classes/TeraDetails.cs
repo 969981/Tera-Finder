@@ -82,6 +82,9 @@ public struct TeraDetails() : IRaidDetails
 
 public struct GridEntry
 {
+    [System.ComponentModel.Browsable(false)]
+    public TeraDetails? Result { get; private set; }
+
     public string? Seed { get; private set; }
     public string? Shiny { get; private set; }
     public string? Stars { get; private set; }
@@ -110,6 +113,7 @@ public struct GridEntry
 
     public GridEntry(TeraDetails res, string[] namelist, string[] abilitylist, string[] naturelist, string[] movelist, string[] typelist, string[] formlist, string[] genderlistascii, string[] genderlistunicode, string[] shinylist)
     {
+        Result = res;
         var str = res.GetStrings(namelist, abilitylist, naturelist, movelist, typelist, formlist, genderlistascii, genderlistunicode, shinylist);
         Seed = str[0];
         Shiny = str[1];
