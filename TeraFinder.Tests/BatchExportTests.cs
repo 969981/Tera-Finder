@@ -56,15 +56,15 @@ public class BatchExportTests
             {
                 using var archive = ZipFile.OpenRead(result.OutputPath);
                 Assert.Equal(3, archive.Entries.Count);
-                var pkEntry = Assert.Single(archive.Entries.Where(z => z.FullName.EndsWith(".pk9")));
-                var binEntry = Assert.Single(archive.Entries.Where(z => z.FullName.EndsWith(".bin")));
+                var pkEntry = Assert.Single(archive.Entries, z => z.FullName.EndsWith(".pk9"));
+                var binEntry = Assert.Single(archive.Entries, z => z.FullName.EndsWith(".bin"));
                 using var pkBuffer = new MemoryStream();
                 using var binBuffer = new MemoryStream();
                 using (var stream = pkEntry.Open()) stream.CopyTo(pkBuffer);
                 using (var stream = binEntry.Open()) stream.CopyTo(binBuffer);
                 pk9 = pkBuffer.ToArray();
                 bin = binBuffer.ToArray();
-                using var reader = new StreamReader(Assert.Single(archive.Entries.Where(z => z.FullName == "manifest.csv")).Open());
+                using var reader = new StreamReader(Assert.Single(archive.Entries, z => z.FullName == "manifest.csv").Open());
                 manifest = reader.ReadToEnd();
             }
             else
@@ -76,7 +76,7 @@ public class BatchExportTests
 
             Assert.Equal(pk9, bin);
             Assert.Contains("DB72E373", manifest);
-            Assert.Contains(",976,3,", manifest); // correct species/stars even without a precomputed snapshot
+            Assert.Contains($",{(ushort)Species.Gimmighoul},3,", manifest); // national species ID and real stars
             Assert.Contains("Exported", manifest);
             Assert.True(new PK9(pk9).ChecksumValid);
         }
