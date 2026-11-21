@@ -1,0 +1,80 @@
+name: Publish v4.3.9 Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-v4.3.9.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download tested Windows binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p release/launcher release/plugins
+          gh run download 44864291062 --repo "$GITHUB_REPOSITORY" --name TeraFinder.Launcher --dir release/launcher
+          gh run download 44864291062 --repo "$GITHUB_REPOSITORY" --name TeraFinder.Plugins --dir release/plugins
+          test -n "$(find release/launcher -type f -print -quit)"
+          test -n "$(find release/plugins -type f -print -quit)"
+
+      - name: Package release ZIPs and checksums
+        run: |
+          set -euo pipefail
+          (cd release/launcher && zip -q -r ../TeraFinder.Launcher-v4.3.9.zip .)
+          (cd release/plugins && zip -q -r ../TeraFinder.Plugins-v4.3.9.zip .)
+          test -s release/TeraFinder.Launcher-v4.3.9.zip
+          test -s release/TeraFinder.Plugins-v4.3.9.zip
+          sha256sum release/*.zip > release/SHA256SUMS.txt
+
+      - name: Write release notes
+        run: |
+          cat > release/RELEASE_NOTES.md <<'EOF'
+          # Tera Finder v4.3.9 — Batch Pokémon Export
+
+          Adds **batch PK9/BIN export** to Raid Calculator and Reward Calculator.
+          Includes the previously released event raid fixes from v4.3.8.1.
+
+          ## New features
+          - Right-click results to export **selected** or **all displayed** rows.
+          - Export PK9 and/or BIN; BIN contains the **exact same PK9 bytes**, not raid seed data.
+          - Poké Ball modes: keep default, select one specific ball, or randomly pick from legal balls using PKHeX. An optional random-ball pool is supported.
+          - ZIP output or regular folders; CSV export manifest, progress, cancellation, failure skipping or stop-on-error.
+          - Rejects noncatchable Pokémon, illegal balls and illegal generated Pokémon; retains original single PK9 export.
+
+          ## Verification
+          - Tested using Windows / .NET 10 GitHub Actions [run #44864291062](https://github.com/969981/Tera-Finder/actions/runs/44864291062): full build + all 16 xUnit tests passed.
+          - Regression tests verify raw PK9/BIN byte equality, ZIP and loose export, fixed illegal ball rejection, manifest species/stars, and cancellation cleanup.
+          - Original private saves were **not** committed.
+          - Windows GUI click testing is still recommended before wide distribution.
+          - The internal UI version string may still show 4.3.8; tag v4.3.9 identifies this patched build.
+
+          ## Files
+          - TeraFinder.Launcher-v4.3.9.zip — standalone Windows program.
+          - TeraFinder.Plugins-v4.3.9.zip — PKHeX plugin distribution.
+          - SHA256SUMS.txt — archive checksums.
+
+          ### Notes
+          "All" is the set of currently displayed rows (after filtering).
+          Reward Calculator converts the selected reward Seed/group into a PK9 using the current search settings; do not change the search's game/map/progress before export.
+          EOF
+
+      - name: Publish Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=v4.3.9
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/TeraFinder.Launcher-v4.3.9.zip release/TeraFinder.Plugins-v4.3.9.zip release/SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" release/TeraFinder.Launcher-v4.3.9.zip release/TeraFinder.Plugins-v4.3.9.zip release/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "fbb77ee9b7b7068011204d1611af3303104a202d" --title "Tera Finder v4.3.9 — Batch Pokémon Export" --notes-file release/RELEASE_NOTES.md
+          fi
