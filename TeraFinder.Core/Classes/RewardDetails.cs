@@ -69,6 +69,9 @@ public struct RewardDetails : IRaidDetails
 
 public struct RewardGridEntry
 {
+    [System.ComponentModel.Browsable(false)]
+    public RewardDetails? Result { get; private set; }
+
     public string? Seed { get; private set; }
     public string? Info { get; private set; }
     public string? Item1 { get; private set; }
@@ -100,6 +103,7 @@ public struct RewardGridEntry
 
     public RewardGridEntry(RewardDetails res, string[] itemnames, string[]speciesnames, string[] shinynames, string[] typenames, string language)
     {
+        Result = res;
         var str = res.GetStrings(itemnames, language, (MoveType)res.TeraType);
         Seed = $"{res.Seed:X8}";
         Item1 = str[0];

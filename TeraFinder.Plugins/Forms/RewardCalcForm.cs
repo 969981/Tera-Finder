@@ -105,6 +105,19 @@ public partial class RewardCalcForm : Form
 
         dataGrid.RowHeadersWidthSizeMode = DataGridViewRowHeadersWidthSizeMode.EnableResizing;
         dataGrid.RowHeadersVisible = false;
+
+        var chinese = Editor.Language.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
+        var batchSelected = new ToolStripMenuItem(chinese ? "批量导出选中结果 (PK9/BIN)..." : "Batch Export Selected PK9/BIN...");
+        var batchAll = new ToolStripMenuItem(chinese ? "批量导出全部结果 (PK9/BIN)..." : "Batch Export All PK9/BIN...");
+        batchSelected.Click += (_, _) => dataGrid.ShowBatchExport(this, true,
+            cmbGame.SelectedIndex == 0 ? GameVersion.SL : GameVersion.VL,
+            (GameProgress)cmbProgress.SelectedIndex, (TeraRaidMapParent)cmbMap.SelectedIndex);
+        batchAll.Click += (_, _) => dataGrid.ShowBatchExport(this, false,
+            cmbGame.SelectedIndex == 0 ? GameVersion.SL : GameVersion.VL,
+            (GameProgress)cmbProgress.SelectedIndex, (TeraRaidMapParent)cmbMap.SelectedIndex);
+        var batchInsertIndex = contextMenuStrip.Items.IndexOf(btnSaveSelectedCsv) + 1;
+        contextMenuStrip.Items.Insert(batchInsertIndex, batchSelected);
+        contextMenuStrip.Items.Insert(batchInsertIndex + 1, batchAll);
     }
 
     private void GenerateDictionary()
