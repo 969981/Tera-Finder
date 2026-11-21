@@ -444,4 +444,95 @@ public static class GridUtil
         else
             MessageBox.Show(strings["GridUtil.RowsExceeded"]);
     }
+
+    /// <summary>Exports the rows currently displayed, preserving the row's original RNG snapshot.</summary>
+    public static void ShowBatchExport(this DataGridView grid, CalculatorForm owner, bool selectedOnly, TeraRaidMapParent map)
+    {
+        try
+        {
+            var version = owner.cmbGame.SelectedIndex == 0 ? GameVersion.SL : GameVersion.VL;
+            var progress = (GameProgress)owner.cmbProgress.SelectedIndex;
+            var id32 = TidUtil.GetID32(Convert.ToUInt32(owner.txtTID.Text), Convert.ToUInt32(owner.txtSID.Text));
+            var options = CreateBatchExportOptions(grid, selectedOnly, owner.Editor, (RaidContent)owner.cmbContent.SelectedIndex,
+                progress, version, map, id32);
+            using var dialog = new BatchExportForm(options, owner.Editor.Language);
+            dialog.ShowDialog(owner);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(owner, ex.Message, "Batch Export", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    /// <summary>Reward calculator results carry a seed and group ID; the encounter is regenerated on export.</summary>
+    public static void ShowBatchExport(this DataGridView grid, RewardCalcForm owner, bool selectedOnly,
+        GameVersion version, GameProgress progress, TeraRaidMapParent map)
+    {
+        try
+        {
+            var id32 = TidUtil.GetID32(Convert.ToUInt32(owner.txtTID.Text), Convert.ToUInt32(owner.txtSID.Text));
+            var options = CreateBatchExportOptions(grid, selectedOnly, owner.Editor, (RaidContent)owner.cmbContent.SelectedIndex,
+                progress, version, map, id32);
+            using var dialog = new BatchExportForm(options, owner.Editor.Language);
+            dialog.ShowDialog(owner);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(owner, ex.Message, "Batch Export", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    private static BatchExportOptions CreateBatchExportOptions(DataGridView grid, bool selectedOnly, EditorForm editor,
+        RaidContent content, GameProgress progress, GameVersion version, TeraRaidMapParent map, uint id32)
+    {
+        var rows = selectedOnly
+            ? grid.SelectedCells.Cast<DataGridViewCell>().Select(x => x.OwningRow).Distinct().OrderBy(x => x.Index)
+            : grid.Rows.Cast<DataGridViewRow>().Where(x => !x.IsNewRow).OrderBy(x => x.Index);
+        var entries = new List<BatchRaidEntry>();
+        foreach (var row in rows)
+        {
+            if (row.IsNewRow)
+                continue;
+            if (row.DataBoundItem is GridEntry { Result: { } rng })
+            {
+                entries.Add(new BatchRaidEntry(rng.Seed, rng.EventIndex, rng));
+                continue;
+            }
+            if (row.DataBoundItem is RewardGridEntry { Result: { } rewards })
+            {
+                entries.Add(new BatchRaidEntry(rewards.Seed, rewards.EventIndex));
+                continue;
+            }
+
+            // Fallback for older/unbound grids. Never rely on the visible row
+            // index to index the concurrent search results.
+            if (row.Cells.Count < 2)
+                continue;
+            var seedText = Convert.ToString(row.Cells[0].Value);
+            var groupText = Convert.ToString(row.Cells[^1].Value);
+            if (uint.TryParse(seedText, System.Globalization.NumberStyles.HexNumber,
+                    System.Globalization.CultureInfo.InvariantCulture, out var seed) &&
+                byte.TryParse(groupText, out var group))
+                entries.Add(new BatchRaidEntry(seed, group));
+        }
+
+        if (entries.Count == 0)
+            throw new InvalidOperationException("No exportable rows. Select a result or finish the search first.");
+
+        return new BatchExportOptions
+        {
+            Entries = entries,
+            Encounters = editor.GetCurrentEncounters(content, map),
+            Version = version,
+            Progress = progress,
+            EventProgress = EventUtil.GetEventStageFromProgress(progress),
+            Content = content,
+            Map = map,
+            ID32 = id32,
+            OriginalTrainer = editor.SAV.OT,
+            Language = editor.SAV.Language,
+            TrainerGender = editor.SAV.Gender,
+            DestinationDirectory = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+        };
+    }
 }
