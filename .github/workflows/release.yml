@@ -1,0 +1,156 @@
+name: Official-style single-file Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths:
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v4.3.9)"
+        required: true
+        type: string
+        default: "v4.3.9"
+
+permissions:
+  contents: write
+
+jobs:
+  build-package-publish:
+    runs-on: windows-latest
+    env:
+      Solution_Name: TeraFinder.sln
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_type == 'tag' && github.ref_name || 'v4.3.9' }}
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Checkout PKHeX.Core
+        uses: actions/checkout@v4
+        with:
+          repository: kwsch/PKHeX
+          ref: master
+          path: PKHeX
+      - name: Build matching PKHeX.Core
+        shell: pwsh
+        run: |
+          dotnet restore PKHeX/PKHeX.Core/PKHeX.Core.csproj
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet build PKHeX/PKHeX.Core/PKHeX.Core.csproj -c Release --no-restore
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Restore and replace PKHeX.Core dependency
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet restore $env:Solution_Name
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $base = Join-Path $env:USERPROFILE ".nuget\packages\pkhex.core"
+          $latest = Get-ChildItem $base -Directory | Sort-Object {[version]$_.Name} -Descending | Select-Object -First 1
+          $dest = Join-Path $latest.FullName "lib\net10.0\PKHeX.Core.dll"
+          Copy-Item "PKHeX/PKHeX.Core/bin/Release/net10.0/PKHeX.Core.dll" $dest -Force
+
+      - name: Build and run regression tests
+        shell: pwsh
+        run: |
+          dotnet build $env:Solution_Name -c Release --no-restore
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet test $env:Solution_Name -c Release --no-build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Publish x64 single EXE
+        shell: pwsh
+        run: |
+          dotnet publish TeraFinder.Launcher/TeraFinder.Launcher.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=false -p:PublishTrimmed=false -o package/win-x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Publish x86 single EXE
+        shell: pwsh
+        run: |
+          dotnet publish TeraFinder.Launcher/TeraFinder.Launcher.csproj -c Release -r win-x86 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=false -p:PublishTrimmed=false -o package/win-x86
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Create verified 1-file archives
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+)?$') { throw "Invalid tag: $env:RELEASE_TAG" }
+          New-Item -ItemType Directory -Force package/zips | Out-Null
+          foreach ($arch in @('x64', 'x86')) {
+            $exe = "package/win-$arch/TeraFinder.Launcher.exe"
+            if (!(Test-Path $exe)) { throw "Missing $exe" }
+            Compress-Archive -Path $exe -DestinationPath "package/zips/Win_${arch}_TeraFinder.Launcher_$env:RELEASE_TAG.zip" -CompressionLevel Optimal
+          }
+          $plugin = "TeraFinder.Plugins/bin/Release/net10.0-windows7.0/TeraFinder.Plugins.dll"
+          if (!(Test-Path $plugin)) { throw "Missing $plugin" }
+          Compress-Archive -Path $plugin -DestinationPath "package/zips/TeraFinder.Plugins_$env:RELEASE_TAG.zip" -CompressionLevel Optimal
+          Add-Type -AssemblyName System.IO.Compression
+          $names = @()
+          foreach ($zip in Get-ChildItem package/zips/*.zip) {
+            $z=[System.IO.Compression.ZipFile]::OpenRead($zip.FullName)
+            try {
+              $entries=@($z.Entries)
+              if ($entries.Count -ne 1) { throw "$($zip.Name) has $($entries.Count) entries, expected 1" }
+              $names += $entries[0].FullName
+              Write-Host "VERIFIED: $($zip.Name) => $($entries[0].FullName) ($($zip.Length) bytes)"
+            }
+            finally { $z.Dispose() }
+          }
+          if (($names | Where-Object { $_ -eq 'TeraFinder.Launcher.exe' }).Count -ne 2 -or
+              ($names | Where-Object { $_ -eq 'TeraFinder.Plugins.dll' }).Count -ne 1) {
+            throw "Unexpected archive file names: $($names -join ', ')"
+          }
+
+      - name: Upload release packages as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TeraFinder.SingleFileRelease
+          path: package/zips/*.zip
+          if-no-files-found: error
+
+      - name: Update GitHub Release with upstream-style assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = $env:RELEASE_TAG
+          $repo = $env:GITHUB_REPOSITORY
+          $zips = @(Get-ChildItem package/zips/*.zip | Sort-Object Name)
+          $PSNativeCommandUseErrorActionPreference = $false
+          $old = (gh release view $tag --repo $repo --json body --jq .body 2>$null | Out-String).TrimEnd()
+          $exists = $LASTEXITCODE -eq 0
+          $marker = '## Official-style distribution'
+          $idx = $old.IndexOf($marker, [StringComparison]::Ordinal)
+          if ($idx -ge 0) { $old = $old.Substring(0, $idx).TrimEnd() }
+          if (!$old) { $old = "# Tera Finder $tag" }
+          $hashes = $zips | ForEach-Object { ("{0}  {1}" -f (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLowerInvariant(), $_.Name) }
+          $body = $old + "`n`n" + $marker + "`n`n" +
+            "Repacked to match the upstream project: Windows x64 and x86 ZIPs contain only **TeraFinder.Launcher.exe**; the plugin ZIP contains only **TeraFinder.Plugins.dll**. No intermediate build directories, deps.json or supporting DLL clutter. The Launcher is framework-dependent and requires the .NET 10 Windows Desktop Runtime.`n`n" +
+            "Automated regression tests passed. On-device GUI testing is still recommended.`n`n" +
+            "SHA-256 checksums:`n" + ($hashes -join "`n")
+          $notes = "package/zips/release-notes.md"
+          [System.IO.File]::WriteAllText((Join-Path (Get-Location) $notes), $body, [System.Text.UTF8Encoding]::new($false))
+          if ($exists) {
+            gh release upload $tag @($zips.FullName) --clobber --repo $repo
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            if ($tag -eq 'v4.3.9') {
+              $current = (gh api "repos/$repo/releases/tags/$tag" | ConvertFrom-Json).assets
+              foreach ($asset in $current) {
+                if ($asset.name -in @('TeraFinder.Launcher-v4.3.9.zip', 'TeraFinder.Plugins-v4.3.9.zip', 'SHA256SUMS.txt')) {
+                  gh api -X DELETE "repos/$repo/releases/assets/$($asset.id)"
+                  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+                }
+              }
+            }
+            gh release edit $tag --repo $repo --notes-file $notes
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } else {
+            gh release create $tag @($zips.FullName) --repo $repo --target $env:GITHUB_SHA --title "Tera Finder $tag" --notes-file $notes
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
