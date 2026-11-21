@@ -1,0 +1,32 @@
+name: Inspect upstream release packaging
+
+on:
+  push:
+    branches: ["fix/release-packaging-upstream"]
+    paths: [".github/workflows/inspect-upstream-packages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compare ZIP members
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir upstream own
+          gh release download 4.3.8 --repo Manu098vm/Tera-Finder --dir upstream
+          gh release download v4.3.9 --repo 969981/Tera-Finder --dir own
+          for file in upstream/*.zip own/*.zip; do
+            echo "::group::$(basename "$file")"
+            echo "COUNT: $(unzip -Z1 "$file" | wc -l)"
+            echo "ALL NAMED TOP-LEVEL:"
+            unzip -Z1 "$file" | sed 's|/.*||' | sort -u | head -150
+            echo "FIRST 100 ZIP ENTRIES:"
+            unzip -Z1 "$file" | head -100
+            echo "::endgroup::"
+          done
