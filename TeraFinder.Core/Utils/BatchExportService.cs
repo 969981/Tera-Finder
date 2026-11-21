@@ -117,7 +117,7 @@ public static class BatchExportService
                             }
 
                             exported++;
-                            AddManifestRow(manifest, index + 1, entry, file.PK.Species, file.PK.Ball, "Exported", string.Join(";", filenames), "");
+                            AddManifestRow(manifest, index + 1, entry, file.PK.Species, file.Stars, file.PK.Ball, "Exported", string.Join(";", filenames), "");
                         }
                         catch (OperationCanceledException)
                         {
@@ -126,7 +126,7 @@ public static class BatchExportService
                         catch (Exception ex) when (!options.StopOnError)
                         {
                             skipped++;
-                            AddManifestRow(manifest, index + 1, entry, 0, 0, "Skipped", "", ex.Message);
+                            AddManifestRow(manifest, index + 1, entry, 0, 0, 0, "Skipped", "", ex.Message);
                         }
                         progress?.Report(new BatchExportProgress(index + 1, options.Entries.Count, exported, skipped));
                     }
@@ -165,7 +165,7 @@ public static class BatchExportService
         }
     }
 
-    private static (PK9 PK, Ball Ball) Generate(BatchRaidEntry entry, BatchExportOptions options)
+    private static (PK9 PK, Ball Ball, int Stars) Generate(BatchRaidEntry entry, BatchExportOptions options)
     {
         if (!EncounterRaidTF9.TryGenerateTeraDetails(entry.Seed, options.Encounters,
                 options.Version, options.Progress, options.EventProgress, options.Content,
@@ -198,7 +198,7 @@ public static class BatchExportService
         if (!legality.Valid && !knownECException)
             throw new InvalidOperationException("PKHeX legality validation failed: " + legality.Report());
 
-        return (pk, ball);
+        return (pk, ball, rng.Value.Stars);
     }
 
     public static Ball ResolveBall(PK9 pk, EncounterRaidTF9 encounter, BatchExportOptions options)
@@ -251,11 +251,11 @@ public static class BatchExportService
     }
 
     private static void AddManifestRow(StringBuilder sb, int index, BatchRaidEntry entry,
-        ushort species, byte ball, string status, string files, string reason)
+        ushort species, int stars, byte ball, string status, string files, string reason)
     {
         sb.Append(index).Append(',').Append(entry.Seed.ToString("X8")).Append(',')
           .Append(entry.GroupID).Append(',').Append(species).Append(',')
-          .Append(entry.Expected?.Stars ?? 0).Append(',').Append(ball).Append(',')
+          .Append(stars).Append(',').Append(ball).Append(',')
           .Append(Csv(status)).Append(',').Append(Csv(files)).Append(',').Append(Csv(reason))
           .Append("\r\n");
     }
